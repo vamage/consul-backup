@@ -9,14 +9,14 @@ and "go get github.com/docopt/docopt-go"
 a "go build" will generate executable named "consul-backup"
 
 ##Usage
-
+```
 consul-backup [-i IP:PORT] [-t TOKEN] [--kv] [--kvfile KVBACKUPFILE] [--acl] [--aclfile ACLBACKUPFILE] [--restore]
 consul-backup -h | --help
 consul-backup --version
-
+```
 
 ##Options
-
+```
 -h --help                          Show this screen.
 --version                          Show version.
 -i, --address=IP:PORT              The HTTP endpoint of Consul [default: 127.0.0.1:8500].
@@ -25,4 +25,5 @@ consul-backup --version
 -a, --acl                          Backup or restore ACL
 -K, --kvfile=KVBACKUPFILE          KV Backup Filename [default: kv.bkp].
 -A, --aclfile=ACLBACKUPFILE        ACL Backup Filename [default: acl.bkp].
--r, --restore                      Activate restore mode``
+-r, --restore                      Activate restore mode
+```
