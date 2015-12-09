@@ -29,8 +29,16 @@ func (a ByCreateIndex) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 //Sort the KVs by createIndex
 func (a ByCreateIndex) Less(i, j int) bool { return a[i].CreateIndex < a[j].CreateIndex }
 
+//type ACLEntry struct {
+//    CreateIndex uint64
+//    ModifyIndex uint64
+//    ID          string
+//    Name        string
+//    Type        string
+//    Rules       string
+//}
 
-func backup(ipaddress string, token string, outfile string) {
+func backupKv(ipaddress string, token string, outfile string) {
 
     config := api.DefaultConfig()
     config.Address = ipaddress
@@ -80,7 +88,7 @@ func backupAcls(ipaddress string, token string, outfile string) {
     outstring := ""
 	for _, element := range tokens {
         // outstring += fmt.Sprintf("%s:%s:%s:%s\n", element.ID, element.Name, element.Type, element.Rules)
-        outstring += fmt.Sprintf("====\nID: %s\nName: %s\nType: %s\nRules:\n%s\n", element.ID, element.Name, element.Type, element.Rules)
+        outstring += fmt.Sprintf("====\nID:%s\nName:%s\nType:%s\nRules:%s\n", element.ID, element.Name, element.Type, element.Rules)
 	}
 
     file, err := os.Create(outfile)
@@ -97,7 +105,7 @@ func backupAcls(ipaddress string, token string, outfile string) {
     KEY1:VALUE1
     KEY2:VALUE2
 */
-func restore(ipaddress string, token string, infile string) {
+func restoreKv(ipaddress string, token string, infile string) {
 
     config := api.DefaultConfig()
     config.Address = ipaddress
@@ -105,7 +113,7 @@ func restore(ipaddress string, token string, infile string) {
 
     data, err := ioutil.ReadFile(infile)
     if err != nil {
-    	panic(err)
+        panic(err)
     }
 
     client, _ := api.NewClient(config)
@@ -129,12 +137,65 @@ func restore(ipaddress string, token string, infile string) {
     }
 }
 
+func restoreAcls(ipaddress string, token string, infile string) {
+
+    config := api.DefaultConfig()
+    config.Address = ipaddress
+    config.Token = token
+
+    data, err := ioutil.ReadFile(infile)
+    if err != nil {
+        panic(err)
+    }
+
+	client, _ := api.NewClient(config)
+	acl := client.ACL()
+
+    for _, block := range strings.Split(string(data), "====") {
+
+        block = strings.TrimSpace(block)
+
+        // first line can be empty, should abort
+        if block == "" {
+            continue
+        }
+
+        acl_rule_object := make(map[string]string)
+        acl_block_part := ""
+
+        for _, element := range strings.Split(string(block), "\n") {
+            aclp := strings.SplitN(element, ":", 2)
+            if len(aclp) > 1 && acl_block_part != "Rules" {
+                acl_block_part = aclp[0]
+                acl_rule_object[acl_block_part] = aclp[1]
+            } else {
+                acl_rule_object[acl_block_part] = acl_rule_object[acl_block_part] + "\n" + element
+            }
+
+        }
+
+        acl_rule_object["Rules"] = strings.TrimSpace(string(acl_rule_object["Rules"]))
+
+        e := &api.ACLEntry{
+            ID: acl_rule_object["ID"],
+            Name: acl_rule_object["Name"],
+            Type: acl_rule_object["Type"],
+            Rules: acl_rule_object["Rules"],
+        }
+
+        _, err := acl.Update(e, nil)
+        if err != nil {
+            panic(err)
+        }
+    }
+}
+
 func main() {
 
     usage := `Consul KV and ACL Backup with KV Restore tool.
 
 Usage:
-  consul-backup [-i IP:PORT] [-t TOKEN] [--aclbackup] [--aclbackupfile ACLBACKUPFILE] [--restore] <filename>
+  consul-backup [-i IP:PORT] [-t TOKEN] [--kv] [--kvfile KVBACKUPFILE] [--acl] [--aclfile ACLBACKUPFILE] [--restore]
   consul-backup -h | --help
   consul-backup --version
 
@@ -143,26 +204,44 @@ Options:
   --version                          Show version.
   -i, --address=IP:PORT              The HTTP endpoint of Consul [default: 127.0.0.1:8500].
   -t, --token=TOKEN                  An ACL Token with proper permissions in Consul [default: ].
-  -a, --aclbackup                    Backup ACLs, does nothing in restore mode. ACL restore not available at this time.
-  -b, --aclbackupfile=ACLBACKUPFILE  ACL Backup Filename [default: acl.bkp].
+  -k, --kv                           Backup or restore KV
+  -a, --acl                          Backup or restore ACL
+  -K, --kvfile=KVBACKUPFILE          KV Backup Filename [default: kv.bkp].
+  -A, --aclfile=ACLBACKUPFILE        ACL Backup Filename [default: acl.bkp].
   -r, --restore                      Activate restore mode`
 
   arguments, _ := docopt.Parse(usage, nil, true, "consul-backup 1.0", false)
   fmt.Println(arguments)
 
-  if arguments["--restore"] == true {
-    fmt.Println("Restore mode:")
-    fmt.Printf("Warning! This will overwrite existing kv. Press [enter] to continue; CTL-C to exit")
-    fmt.Scanln()
-    fmt.Println("Restoring KV from file: ", arguments["<filename>"].(string))
-    restore(arguments["--address"].(string), arguments["--token"].(string), arguments["<filename>"].(string))
-  } else {
-    fmt.Println("Backup mode:")
-    fmt.Println("KV store will be backed up to file: ", arguments["<filename>"].(string))
-    backup(arguments["--address"].(string), arguments["--token"].(string), arguments["<filename>"].(string))
-    if arguments["--aclbackup"] == true {
-      fmt.Println("ACL Tokens will be backed up to file: ", arguments["--aclbackupfile"].(string))
-      backupAcls(arguments["--address"].(string), arguments["--token"].(string), arguments["--aclbackupfile"].(string))
+    if arguments["--restore"] == true {
+        fmt.Println("Restore mode:")
+        if arguments["--acl"] == false && arguments["--kv"] == false {
+            fmt.Println("Nothing to do. Please specify '--kv' or '--acl' parameter")
+            os.Exit(1)
+        }
+        fmt.Printf("Warning! This will overwrite existing kv or acls. Press [enter] to continue; CTL-C to exit")
+        fmt.Scanln()
+        if arguments["--kv"] == true {
+            fmt.Println("Restoring KV from file: ", arguments["--kvfile"].(string))
+            restoreKv(arguments["--address"].(string), arguments["--token"].(string), arguments["--kvfile"].(string))
+        }
+        if arguments["--acl"] == true {
+            fmt.Println("Restoring ACL Tokens from file: ", arguments["--aclfile"].(string))
+            restoreAcls(arguments["--address"].(string), arguments["--token"].(string), arguments["--aclfile"].(string))
+        }
+    } else {
+        fmt.Println("Backup mode:")
+        if arguments["--kv"] == true {
+            fmt.Println("KV store will be backed up to file: ", arguments["--kvfile"].(string))
+            backupKv(arguments["--address"].(string), arguments["--token"].(string), arguments["--kvfile"].(string))
+        }
+        if arguments["--acl"] == true {
+            fmt.Println("ACL Tokens will be backed up to file: ", arguments["--aclfile"].(string))
+            backupAcls(arguments["--address"].(string), arguments["--token"].(string), arguments["--aclfile"].(string))
+        }
+        if arguments["--acl"] == false && arguments["--kv"] == false {
+            fmt.Println("Nothing to do. Please specify '--kv' or '--acl' parameter")
+            os.Exit(1)
+        }
     }
-  }
 }
