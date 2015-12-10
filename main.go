@@ -210,7 +210,7 @@ Options:
   -A, --aclfile=ACLBACKUPFILE        ACL Backup Filename [default: acl.bkp].
   -r, --restore                      Activate restore mode`
 
-  arguments, _ := docopt.Parse(usage, nil, true, "consul-backup 1.0", false)
+  arguments, _ := docopt.Parse(usage, nil, true, "consul-backup 1.1", false)
   fmt.Println(arguments)
 
     if arguments["--restore"] == true {
