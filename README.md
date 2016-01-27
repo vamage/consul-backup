@@ -1,8 +1,6 @@
 # `consul-backup` - consul Backup and Restore tool
 
-This will use consul-api (Go library) to recursively backup and restore all your
-key/value pairs. You need to set up your Go environment and `go get github.com/hashicorp/consul/api`
-and `go get github.com/docopt/docopt-go`. Using `go build` will generate executable named `consul-backup`.
+This will use consul-api (Go library) to recursively backup and restore all your key/value pairs. You need to set up your Go environment, then run `make`, which will generate executable named `consul-backup`.
 
 ```sh
 Usage:
