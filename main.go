@@ -3,12 +3,13 @@ package main
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/docopt/docopt-go"
-	"github.com/hashicorp/consul/api"
 	"io/ioutil"
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/docopt/docopt-go"
+	"github.com/hashicorp/consul/api"
 )
 
 //type KVPair struct {
@@ -21,22 +22,13 @@ import (
 //    Session     string
 //}
 
-type ByCreateIndex api.KVPairs
+type byCreateIndex api.KVPairs
 
-func (a ByCreateIndex) Len() int      { return len(a) }
-func (a ByCreateIndex) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a byCreateIndex) Len() int      { return len(a) }
+func (a byCreateIndex) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 
-//Sort the KVs by createIndex
-func (a ByCreateIndex) Less(i, j int) bool { return a[i].CreateIndex < a[j].CreateIndex }
-
-//type ACLEntry struct {
-//    CreateIndex uint64
-//    ModifyIndex uint64
-//    ID          string
-//    Name        string
-//    Type        string
-//    Rules       string
-//}
+// Sort the KVs by createIndex
+func (a byCreateIndex) Less(i, j int) bool { return a[i].CreateIndex < a[j].CreateIndex }
 
 func backupKv(ipaddress string, token string, outfile string) {
 
@@ -52,12 +44,12 @@ func backupKv(ipaddress string, token string, outfile string) {
 		panic(err)
 	}
 
-	sort.Sort(ByCreateIndex(pairs))
+	sort.Sort(byCreateIndex(pairs))
 
 	outstring := ""
 	for _, element := range pairs {
-		encoded_value := base64.StdEncoding.EncodeToString(element.Value)
-		outstring += fmt.Sprintf("%s:%s\n", element.Key, encoded_value)
+		encodedValue := base64.StdEncoding.EncodeToString(element.Value)
+		outstring += fmt.Sprintf("%s:%s\n", element.Key, encodedValue)
 	}
 
 	file, err := os.Create(outfile)
@@ -83,7 +75,7 @@ func backupAcls(ipaddress string, token string, outfile string) {
 	if err != nil {
 		panic(err)
 	}
-	// sort.Sort(ByCreateIndex(tokens))
+	// sort.Sort(byCreateIndex(tokens))
 
 	outstring := ""
 	for _, element := range tokens {
@@ -212,7 +204,7 @@ Options:
   -A, --aclfile=ACLBACKUPFILE        ACL Backup Filename [default: acl.bkp].
   -r, --restore                      Activate restore mode`
 
-	arguments, _ := docopt.Parse(usage, nil, true, "consul-backup 1.1", false)
+	arguments, _ := docopt.Parse(usage, nil, true, "consul-backup 1.2", false)
 	fmt.Println(arguments)
 
 	if arguments["--restore"] == true {
