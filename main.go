@@ -1,16 +1,15 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
-    "sort"
-    "os"
-    "io/ioutil"
-    "strings"
+	"github.com/docopt/docopt-go"
 	"github.com/hashicorp/consul/api"
-    "github.com/docopt/docopt-go"
-    "encoding/base64"
+	"io/ioutil"
+	"os"
+	"sort"
+	"strings"
 )
-
 
 //type KVPair struct {
 //    Key         string
@@ -24,8 +23,9 @@ import (
 
 type ByCreateIndex api.KVPairs
 
-func (a ByCreateIndex) Len() int           { return len(a) }
-func (a ByCreateIndex) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByCreateIndex) Len() int      { return len(a) }
+func (a ByCreateIndex) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+
 //Sort the KVs by createIndex
 func (a ByCreateIndex) Less(i, j int) bool { return a[i].CreateIndex < a[j].CreateIndex }
 
@@ -40,159 +40,161 @@ func (a ByCreateIndex) Less(i, j int) bool { return a[i].CreateIndex < a[j].Crea
 
 func backupKv(ipaddress string, token string, outfile string) {
 
-    config := api.DefaultConfig()
-    config.Address = ipaddress
-    config.Token = token
+	config := api.DefaultConfig()
+	config.Address = ipaddress
+	config.Token = token
 
 	client, _ := api.NewClient(config)
 	kv := client.KV()
 
 	pairs, _, err := kv.List("/", nil)
-    if err != nil {
-        panic(err)
-    }
-
-    sort.Sort(ByCreateIndex(pairs))
-
-    outstring := ""
-	for _, element := range pairs {
-        encoded_value := base64.StdEncoding.EncodeToString(element.Value)
-        outstring += fmt.Sprintf("%s:%s\n", element.Key, encoded_value)
+	if err != nil {
+		panic(err)
 	}
 
-    file, err := os.Create(outfile)
-    if err != nil {
-        panic(err)
-    }
+	sort.Sort(ByCreateIndex(pairs))
 
-    if _, err := file.Write([]byte(outstring)[:]); err != nil {
-        panic(err)
-    }
+	outstring := ""
+	for _, element := range pairs {
+		encoded_value := base64.StdEncoding.EncodeToString(element.Value)
+		outstring += fmt.Sprintf("%s:%s\n", element.Key, encoded_value)
+	}
+
+	file, err := os.Create(outfile)
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := file.Write([]byte(outstring)[:]); err != nil {
+		panic(err)
+	}
 }
 
 func backupAcls(ipaddress string, token string, outfile string) {
 
-    config := api.DefaultConfig()
-    config.Address = ipaddress
-    config.Token = token
+	config := api.DefaultConfig()
+	config.Address = ipaddress
+	config.Token = token
 
 	client, _ := api.NewClient(config)
 	acl := client.ACL()
 
 	tokens, _, err := acl.List(nil)
-    if err != nil {
-            panic(err)
-        }
-    // sort.Sort(ByCreateIndex(tokens))
+	if err != nil {
+		panic(err)
+	}
+	// sort.Sort(ByCreateIndex(tokens))
 
-    outstring := ""
+	outstring := ""
 	for _, element := range tokens {
-        // outstring += fmt.Sprintf("%s:%s:%s:%s\n", element.ID, element.Name, element.Type, element.Rules)
-        outstring += fmt.Sprintf("====\nID:%s\nName:%s\nType:%s\nRules:%s\n", element.ID, element.Name, element.Type, element.Rules)
+		// outstring += fmt.Sprintf("%s:%s:%s:%s\n", element.ID, element.Name, element.Type, element.Rules)
+		outstring += fmt.Sprintf("====\nID: %s\nName: %s\nType: %s\nRules:\n%s\n", element.ID, element.Name, element.Type, element.Rules)
 	}
 
-    file, err := os.Create(outfile)
-    if err != nil {
-        panic(err)
-    }
+	file, err := os.Create(outfile)
+	if err != nil {
+		panic(err)
+	}
 
-    if _, err := file.Write([]byte(outstring)[:]); err != nil {
-        panic(err)
-    }
+	if _, err := file.Write([]byte(outstring)[:]); err != nil {
+		panic(err)
+	}
 }
 
 /* File needs to be in the following format:
-    KEY1:VALUE1
-    KEY2:VALUE2
+   KEY1:VALUE1
+   KEY2:VALUE2
 */
 func restoreKv(ipaddress string, token string, infile string) {
 
-    config := api.DefaultConfig()
-    config.Address = ipaddress
-    config.Token = token
+	config := api.DefaultConfig()
+	config.Address = ipaddress
+	config.Token = token
 
-    data, err := ioutil.ReadFile(infile)
-    if err != nil {
-        panic(err)
-    }
+	data, err := ioutil.ReadFile(infile)
+	if err != nil {
+		panic(err)
+	}
 
-    client, _ := api.NewClient(config)
-    kv := client.KV()
+	client, _ := api.NewClient(config)
+	kv := client.KV()
 
-    for _, element := range strings.Split(string(data), "\n") {
-        kvp := strings.Split(element, ":")
+	for _, element := range strings.Split(string(data), "\n") {
+		split := strings.Split(element, ":")
+		key := strings.Join(split[:len(split)-1], ":")
+		value := split[len(split)-1]
 
-        if len(kvp) > 1 {
-            decoded_value, decode_err := base64.StdEncoding.DecodeString(kvp[1])
-            if decode_err != nil {
-                panic(decode_err)
-            }
+		if key != "" {
+			decoded_value, decode_err := base64.StdEncoding.DecodeString(value)
+			if decode_err != nil {
+				panic(decode_err)
+			}
 
-            p := &api.KVPair{Key: kvp[0], Value: decoded_value}
-            _, err := kv.Put(p, nil)
-            if err != nil {
-                panic(err)
-            }
-        }
-    }
+			p := &api.KVPair{Key: key, Value: decoded_value}
+			_, err := kv.Put(p, nil)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
 }
 
 func restoreAcls(ipaddress string, token string, infile string) {
 
-    config := api.DefaultConfig()
-    config.Address = ipaddress
-    config.Token = token
+	config := api.DefaultConfig()
+	config.Address = ipaddress
+	config.Token = token
 
-    data, err := ioutil.ReadFile(infile)
-    if err != nil {
-        panic(err)
-    }
+	data, err := ioutil.ReadFile(infile)
+	if err != nil {
+		panic(err)
+	}
 
 	client, _ := api.NewClient(config)
 	acl := client.ACL()
 
-    for _, block := range strings.Split(string(data), "====") {
+	for _, block := range strings.Split(string(data), "====") {
 
-        block = strings.TrimSpace(block)
+		block = strings.TrimSpace(block)
 
-        // first line can be empty, should abort
-        if block == "" {
-            continue
-        }
+		// first line can be empty, should abort
+		if block == "" {
+			continue
+		}
 
-        acl_rule_object := make(map[string]string)
-        acl_block_part := ""
+		acl_rule_object := make(map[string]string)
+		acl_block_part := ""
 
-        for _, element := range strings.Split(string(block), "\n") {
-            aclp := strings.SplitN(element, ":", 2)
-            if len(aclp) > 1 && acl_block_part != "Rules" {
-                acl_block_part = aclp[0]
-                acl_rule_object[acl_block_part] = aclp[1]
-            } else {
-                acl_rule_object[acl_block_part] = acl_rule_object[acl_block_part] + "\n" + element
-            }
+		for _, element := range strings.Split(string(block), "\n") {
+			aclp := strings.SplitN(element, ":", 2)
+			if len(aclp) > 1 && acl_block_part != "Rules" {
+				acl_block_part = aclp[0]
+				acl_rule_object[acl_block_part] = aclp[1]
+			} else {
+				acl_rule_object[acl_block_part] = acl_rule_object[acl_block_part] + "\n" + element
+			}
 
-        }
+		}
 
-        acl_rule_object["Rules"] = strings.TrimSpace(string(acl_rule_object["Rules"]))
+		acl_rule_object["Rules"] = strings.TrimSpace(string(acl_rule_object["Rules"]))
 
-        e := &api.ACLEntry{
-            ID: acl_rule_object["ID"],
-            Name: acl_rule_object["Name"],
-            Type: acl_rule_object["Type"],
-            Rules: acl_rule_object["Rules"],
-        }
+		e := &api.ACLEntry{
+			ID:    acl_rule_object["ID"],
+			Name:  acl_rule_object["Name"],
+			Type:  acl_rule_object["Type"],
+			Rules: acl_rule_object["Rules"],
+		}
 
-        _, err := acl.Update(e, nil)
-        if err != nil {
-            panic(err)
-        }
-    }
+		_, err := acl.Update(e, nil)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
 
 func main() {
 
-    usage := `Consul KV and ACL Backup with KV Restore tool.
+	usage := `Consul KV and ACL Backup with KV Restore tool.
 
 Usage:
   consul-backup [-i IP:PORT] [-t TOKEN] [--kv] [--kvfile KVBACKUPFILE] [--acl] [--aclfile ACLBACKUPFILE] [--restore]
@@ -210,38 +212,38 @@ Options:
   -A, --aclfile=ACLBACKUPFILE        ACL Backup Filename [default: acl.bkp].
   -r, --restore                      Activate restore mode`
 
-  arguments, _ := docopt.Parse(usage, nil, true, "consul-backup 1.1", false)
-  fmt.Println(arguments)
+	arguments, _ := docopt.Parse(usage, nil, true, "consul-backup 1.1", false)
+	fmt.Println(arguments)
 
-    if arguments["--restore"] == true {
-        fmt.Println("Restore mode:")
-        if arguments["--acl"] == false && arguments["--kv"] == false {
-            fmt.Println("Nothing to do. Please specify '--kv' or '--acl' parameter")
-            os.Exit(1)
-        }
-        fmt.Printf("Warning! This will overwrite existing kv or acls. Press [enter] to continue; CTL-C to exit")
-        fmt.Scanln()
-        if arguments["--kv"] == true {
-            fmt.Println("Restoring KV from file: ", arguments["--kvfile"].(string))
-            restoreKv(arguments["--address"].(string), arguments["--token"].(string), arguments["--kvfile"].(string))
-        }
-        if arguments["--acl"] == true {
-            fmt.Println("Restoring ACL Tokens from file: ", arguments["--aclfile"].(string))
-            restoreAcls(arguments["--address"].(string), arguments["--token"].(string), arguments["--aclfile"].(string))
-        }
-    } else {
-        fmt.Println("Backup mode:")
-        if arguments["--kv"] == true {
-            fmt.Println("KV store will be backed up to file: ", arguments["--kvfile"].(string))
-            backupKv(arguments["--address"].(string), arguments["--token"].(string), arguments["--kvfile"].(string))
-        }
-        if arguments["--acl"] == true {
-            fmt.Println("ACL Tokens will be backed up to file: ", arguments["--aclfile"].(string))
-            backupAcls(arguments["--address"].(string), arguments["--token"].(string), arguments["--aclfile"].(string))
-        }
-        if arguments["--acl"] == false && arguments["--kv"] == false {
-            fmt.Println("Nothing to do. Please specify '--kv' or '--acl' parameter")
-            os.Exit(1)
-        }
-    }
+	if arguments["--restore"] == true {
+		fmt.Println("Restore mode:")
+		if arguments["--acl"] == false && arguments["--kv"] == false {
+			fmt.Println("Nothing to do. Please specify '--kv' or '--acl' parameter")
+			os.Exit(1)
+		}
+		fmt.Printf("Warning! This will overwrite existing kv or acls. Press [enter] to continue; CTL-C to exit")
+		fmt.Scanln()
+		if arguments["--kv"] == true {
+			fmt.Println("Restoring KV from file: ", arguments["--kvfile"].(string))
+			restoreKv(arguments["--address"].(string), arguments["--token"].(string), arguments["--kvfile"].(string))
+		}
+		if arguments["--acl"] == true {
+			fmt.Println("Restoring ACL Tokens from file: ", arguments["--aclfile"].(string))
+			restoreAcls(arguments["--address"].(string), arguments["--token"].(string), arguments["--aclfile"].(string))
+		}
+	} else {
+		fmt.Println("Backup mode:")
+		if arguments["--kv"] == true {
+			fmt.Println("KV store will be backed up to file: ", arguments["--kvfile"].(string))
+			backupKv(arguments["--address"].(string), arguments["--token"].(string), arguments["--kvfile"].(string))
+		}
+		if arguments["--acl"] == true {
+			fmt.Println("ACL Tokens will be backed up to file: ", arguments["--aclfile"].(string))
+			backupAcls(arguments["--address"].(string), arguments["--token"].(string), arguments["--aclfile"].(string))
+		}
+		if arguments["--acl"] == false && arguments["--kv"] == false {
+			fmt.Println("Nothing to do. Please specify '--kv' or '--acl' parameter")
+			os.Exit(1)
+		}
+	}
 }
