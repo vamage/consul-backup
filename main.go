@@ -169,7 +169,7 @@ func restoreAcls(ipaddress string, token string, infile string) {
 		}
 
 		acl_rule_object["Rules"] = strings.TrimSpace(string(acl_rule_object["Rules"]))
-
+		acl_rule_object["Type"] = strings.TrimSpace(string(acl_rule_object["Type"]))
 		e := &api.ACLEntry{
 			ID:    acl_rule_object["ID"],
 			Name:  acl_rule_object["Name"],
